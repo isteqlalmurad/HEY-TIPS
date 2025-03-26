@@ -1,11 +1,14 @@
+// components/ChatMode.tsx
 "use client";
 
 import { useState, useEffect, useRef } from "react";
 import { Button, Card, CardBody, CardFooter, Divider, Spinner, Avatar } from "@nextui-org/react";
 import InteractiveAvatarTextInput from "./InteractiveAvatarTextInput";
+import PatientSelection from "./PatientSelection";
+import { Patient } from "@/app/lib/patients";
 
 interface Message {
-  role: "user" | "assistant";
+  role: "user" | "assistant" | "system";
   content: string;
 }
 
@@ -15,11 +18,22 @@ export default function ChatMode() {
   const [isLoading, setIsLoading] = useState(false);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
 
   // Scroll to bottom whenever messages change
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
+
+  // Handle patient selection
+  const handleSelectPatient = (patient: Patient) => {
+    setSelectedPatient(patient);
+    // Initialize messages with system message
+    setMessages([
+      { role: "system", content: patient.systemMessage }
+    ]);
+    setSessionId(null); // Reset session ID for new patient
+  };
 
   async function handleSubmit() {
     if (input.trim() === "") return;
@@ -82,16 +96,51 @@ export default function ChatMode() {
     }
   }
 
+  // If no patient is selected, show patient selection
+  if (!selectedPatient) {
+    return (
+      <Card className="w-full h-[600px] flex flex-col">
+        <CardBody className="flex-grow overflow-y-auto p-4">
+          <PatientSelection onSelectPatient={handleSelectPatient} />
+        </CardBody>
+      </Card>
+    );
+  }
+
   return (
     <Card className="w-full h-[600px] flex flex-col">
       <CardBody className="flex-grow overflow-y-auto p-4">
         <div className="flex flex-col gap-4">
-          {messages.length === 0 ? (
+          {/* Patient info header */}
+          <div className="flex items-center gap-4 p-4 bg-gray-100 dark:bg-gray-800 rounded-lg mb-4">
+            <Avatar
+              src={selectedPatient.imagePath}
+              fallback={selectedPatient.name.charAt(0)}
+              className="w-12 h-12"
+            />
+            <div>
+              <h3 className="font-bold text-lg">{selectedPatient.name}</h3>
+              <p className="text-sm text-gray-500">
+                {selectedPatient.age} years, {selectedPatient.ethnicity}
+              </p>
+            </div>
+            <Button 
+              size="sm" 
+              variant="flat" 
+              color="default" 
+              className="ml-auto"
+              onClick={() => setSelectedPatient(null)}
+            >
+              Change Patient
+            </Button>
+          </div>
+
+          {messages.filter(msg => msg.role !== "system").length === 0 ? (
             <div className="text-center text-gray-500 mt-10">
-              Start a conversation by sending a message
+              Start a conversation with {selectedPatient.name} by sending a message
             </div>
           ) : (
-            messages.map((message, index) => (
+            messages.filter(msg => msg.role !== "system").map((message, index) => (
               <div
                 key={index}
                 className={`flex ${
@@ -106,7 +155,8 @@ export default function ChatMode() {
                   <Avatar
                     className={message.role === "user" ? "bg-indigo-500" : "bg-gray-500"}
                     size="sm"
-                    name={message.role === "user" ? "You" : "AI"}
+                    name={message.role === "user" ? "You" : selectedPatient.name}
+                    src={message.role === "assistant" ? selectedPatient.imagePath : undefined}
                   />
                   <div
                     className={`rounded-lg p-3 ${
@@ -124,7 +174,12 @@ export default function ChatMode() {
           {isLoading && (
             <div className="flex justify-start">
               <div className="flex gap-2 max-w-[80%]">
-                <Avatar className="bg-gray-500" size="sm" name="AI" />
+                <Avatar 
+                  className="bg-gray-500" 
+                  size="sm" 
+                  name={selectedPatient.name}
+                  src={selectedPatient.imagePath} 
+                />
                 <div className="rounded-lg p-3 bg-gray-200 dark:bg-gray-700">
                   <Spinner size="sm" color="default" />
                 </div>
@@ -138,7 +193,7 @@ export default function ChatMode() {
       <CardFooter>
         <InteractiveAvatarTextInput
           input={input}
-          label="Message"
+          label={`Message ${selectedPatient.name}`}
           loading={isLoading}
           placeholder="Type your message..."
           setInput={setInput}

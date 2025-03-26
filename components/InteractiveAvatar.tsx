@@ -1,3 +1,4 @@
+// components/InteractiveAvatar.tsx
 import type { StartAvatarResponse } from "@heygen/streaming-avatar";
 
 import StreamingAvatar, {
@@ -16,10 +17,13 @@ import {
   Spinner,
   Chip,
   Progress,
+  Avatar,
 } from "@nextui-org/react";
 import { useEffect, useRef, useState } from "react";
 
-import { AVATARS, STT_LANGUAGE_LIST } from "@/app/lib/constants";
+import { STT_LANGUAGE_LIST } from "@/app/lib/constants";
+import { PATIENTS, Patient } from "@/app/lib/patients";
+import PatientSelection from "./PatientSelection";
 
 interface Message {
   role: "user" | "assistant" | "system";
@@ -38,17 +42,28 @@ export default function InteractiveAvatar() {
   const [language, setLanguage] = useState<string>('en');
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [sessionTimeRemaining, setSessionTimeRemaining] = useState<number>(900); // 15 minutes in seconds
+  const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
 
   const [data, setData] = useState<StartAvatarResponse>();
   const mediaStream = useRef<HTMLVideoElement>(null);
   const avatar = useRef<StreamingAvatar | null>(null);
   const [isUserTalking, setIsUserTalking] = useState(false);
-  const [messages, setMessages] = useState<Message[]>([
-    { role: "system", content: "You are a helpful AI assistant speaking through an avatar." }
-  ]);
+  const [messages, setMessages] = useState<Message[]>([]);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const mediaRecorder = useRef<MediaRecorder | null>(null);
   const recordedChunks = useRef<BlobPart[]>([]);
+
+  // Handle patient selection
+  const handleSelectPatient = (patient: Patient) => {
+    setSelectedPatient(patient);
+    // Set avatar ID from patient data
+    setAvatarId(patient.avatarId);
+    // Initialize messages with system message
+    setMessages([
+      { role: "system", content: patient.systemMessage }
+    ]);
+    setSessionId(null); // Reset session ID for new patient
+  };
 
   async function fetchAccessToken() {
     try {
@@ -65,6 +80,11 @@ export default function InteractiveAvatar() {
   }
 
   async function startSession() {
+    if (!selectedPatient) {
+      setDebug("No patient selected");
+      return;
+    }
+
     setIsLoadingSession(true);
     const newToken = await fetchAccessToken();
     
@@ -126,9 +146,6 @@ export default function InteractiveAvatar() {
       setStream(event.detail);
     });
     
-    // Removed USER_START and USER_STOP event listeners
-    // We'll handle this manually with our own recording buttons
-    
     try {
       const res = await avatar.current.createStartAvatar({
         quality: AvatarQuality.Low,
@@ -144,9 +161,6 @@ export default function InteractiveAvatar() {
 
       setData(res);
       
-      // Don't start voice chat - we'll handle recording manually
-      // Removed call to startVoiceChat()
-      
       // Start session timer
       setSessionTimeRemaining(900); // 15 minutes
       startSessionTimer();
@@ -155,7 +169,7 @@ export default function InteractiveAvatar() {
       setTimeout(async () => {
         if (avatar.current) {
           await avatar.current.speak({ 
-            text: "Hello! I'm ready to chat with you. This session will last for 15 minutes. Use the microphone button to speak, and I'll respond.", 
+            text: `Hello! I'm ${selectedPatient.name}. I'm here to discuss my health concerns with you. This session will last for 15 minutes. Use the microphone button to speak, and I'll respond.`, 
             taskType: TaskType.REPEAT, 
             taskMode: TaskMode.SYNC 
           });
@@ -266,9 +280,6 @@ export default function InteractiveAvatar() {
       mediaRecorder.current.stop();
     }
   }
-  
-// Updated processUserInput function to use the modified generate-response endpoint
-// Replace your existing processUserInput function with this one
 
 async function processUserInput(userInput: string) {
   if (!userInput.trim()) return;
@@ -428,6 +439,7 @@ async function processUserInput(userInput: string) {
     setIsProcessing(false);
   }
 }
+
   async function handleInterrupt() {
     if (!avatar.current) {
       setDebug("Avatar API not initialized");
@@ -476,9 +488,15 @@ async function processUserInput(userInput: string) {
     setStream(undefined);
     setSessionTimeRemaining(900);
     setTranscription("");
-    setMessages([
-      { role: "system", content: "You are a helpful AI assistant speaking through an avatar." }
-    ]);
+    
+    // Keep the selected patient, but reset messages to just the system message
+    if (selectedPatient) {
+      setMessages([
+        { role: "system", content: selectedPatient.systemMessage }
+      ]);
+    } else {
+      setMessages([]);
+    }
   }
 
   useEffect(() => {
@@ -508,6 +526,19 @@ async function processUserInput(userInput: string) {
 
   const sessionProgressPercent = (sessionTimeRemaining / 900) * 100;
 
+  // If no patient is selected, show patient selection
+  if (!selectedPatient) {
+    return (
+      <div className="w-full flex flex-col gap-4">
+        <Card>
+          <CardBody className="h-[500px] flex flex-col justify-center items-center p-6">
+            <PatientSelection onSelectPatient={handleSelectPatient} />
+          </CardBody>
+        </Card>
+      </div>
+    );
+  }
+
   return (
     <div className="w-full flex flex-col gap-4">
       <Card>
@@ -526,25 +557,39 @@ async function processUserInput(userInput: string) {
               >
                 <track kind="captions" />
               </video>
+              
+              {/* Patient info header */}
               <div className="absolute top-3 left-0 right-0 px-4">
-                <div className="flex justify-between items-center mb-1">
-                  <span className="text-sm">Session time remaining: {formatTimeRemaining(sessionTimeRemaining)}</span>
-                  <span className="text-sm">{Math.round(sessionProgressPercent)}%</span>
+                <div className="flex items-center gap-2 bg-black/50 text-white p-2 rounded-lg mb-2">
+                  <Avatar
+                    src={selectedPatient.imagePath}
+                    className="w-8 h-8"
+                    fallback={selectedPatient.name.charAt(0)}
+                  />
+                  <div className="flex-1">
+                    <p className="font-bold text-sm">{selectedPatient.name}</p>
+                    <p className="text-xs">{selectedPatient.age} years, {selectedPatient.ethnicity}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-xs">Session time: {formatTimeRemaining(sessionTimeRemaining)}</p>
+                    <Progress 
+                      color="primary" 
+                      value={sessionProgressPercent} 
+                      className="w-full mt-1" 
+                      size="sm"
+                    />
+                  </div>
                 </div>
-                <Progress 
-                  color="primary" 
-                  value={sessionProgressPercent} 
-                  className="w-full" 
-                  size="sm"
-                />
               </div>
-              {/* Add transcription display */}
+              
+              {/* Transcription display */}
               {transcription && (
-                <div className="absolute top-12 left-0 right-0 px-4 py-2 bg-black/50 text-white">
+                <div className="absolute top-20 left-0 right-0 px-4 py-2 bg-black/50 text-white">
                   <p className="text-sm font-bold">You said:</p>
                   <p className="text-base">{transcription}</p>
                 </div>
               )}
+              
               <div className="flex flex-col gap-2 absolute bottom-3 right-3">
                 <Button
                   className="bg-gradient-to-tr from-indigo-500 to-indigo-300 text-white rounded-lg"
@@ -566,7 +611,23 @@ async function processUserInput(userInput: string) {
             </div>
           ) : !isLoadingSession ? (
             <div className="h-full justify-center items-center flex flex-col gap-8 w-[500px] self-center">
-              <div className="flex flex-col gap-2 w-full">
+              <div className="flex flex-col gap-4 w-full">
+                {/* Patient info display */}
+                <div className="flex items-center gap-4 p-4 bg-gray-100 dark:bg-gray-800 rounded-lg">
+                  <Avatar
+                    src={selectedPatient.imagePath}
+                    className="w-16 h-16"
+                    fallback={selectedPatient.name.charAt(0)}
+                  />
+                  <div>
+                    <h3 className="font-bold text-xl">{selectedPatient.name}</h3>
+                    <p className="text-sm text-gray-500">
+                      {selectedPatient.age} years, {selectedPatient.ethnicity}
+                    </p>
+                    <p className="mt-1">{selectedPatient.shortDescription}</p>
+                  </div>
+                </div>
+                
                 <p className="text-sm font-medium leading-none">
                   Custom Knowledge ID (optional)
                 </p>
@@ -575,30 +636,27 @@ async function processUserInput(userInput: string) {
                   value={knowledgeId}
                   onChange={(e) => setKnowledgeId(e.target.value)}
                 />
+                
                 <p className="text-sm font-medium leading-none">
-                  Custom Avatar ID (optional)
+                  Avatar Selection
                 </p>
+                {/* Avatar is pre-selected based on patient data */}
                 <Input
-                  placeholder="Enter a custom avatar ID"
+                  placeholder="Avatar ID"
                   value={avatarId}
                   onChange={(e) => setAvatarId(e.target.value)}
-                />
-                <Select
-                  placeholder="Or select one from these example avatars"
-                  size="md"
-                  onChange={(e) => {
-                    setAvatarId(e.target.value);
-                  }}
-                >
-                  {AVATARS.map((avatar) => (
-                    <SelectItem
-                      key={avatar.avatar_id}
-                      textValue={avatar.avatar_id}
+                  endContent={
+                    <Button 
+                      size="sm" 
+                      color="default" 
+                      variant="flat" 
+                      onClick={() => setSelectedPatient(null)}
                     >
-                      {avatar.name}
-                    </SelectItem>
-                  ))}
-                </Select>
+                      Change Patient
+                    </Button>
+                  }
+                />
+                
                 <Select
                   label="Select language"
                   placeholder="Select language"
@@ -615,13 +673,14 @@ async function processUserInput(userInput: string) {
                   ))}
                 </Select>
               </div>
+              
               <Button
                 className="bg-gradient-to-tr from-indigo-500 to-indigo-300 w-full text-white"
                 size="md"
                 variant="shadow"
                 onClick={startSession}
               >
-                Start 15-minute session
+                Start 15-minute session with {selectedPatient.name}
               </Button>
             </div>
           ) : (
