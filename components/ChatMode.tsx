@@ -99,8 +99,8 @@ export default function ChatMode() {
   // If no patient is selected, show patient selection
   if (!selectedPatient) {
     return (
-      <Card className="w-full h-[600px] flex flex-col">
-        <CardBody className="flex-grow overflow-y-auto p-4">
+      <Card className="w-full h-[700px] flex flex-col">
+        <CardBody className="flex-grow p-4">
           <PatientSelection onSelectPatient={handleSelectPatient} />
         </CardBody>
       </Card>
@@ -108,7 +108,7 @@ export default function ChatMode() {
   }
 
   return (
-    <Card className="w-full h-[600px] flex flex-col">
+    <Card className="w-full h-[700px] flex flex-col">
       <CardBody className="flex-grow overflow-y-auto p-4">
         <div className="flex flex-col gap-4">
           {/* Patient info header */}

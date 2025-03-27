@@ -11,10 +11,12 @@ interface PatientSelectionProps {
 
 export default function PatientSelection({ onSelectPatient }: PatientSelectionProps) {
   return (
-    <div className="w-full">
-      <h2 className="text-2xl font-bold mb-6 text-center">Select a Patient to Interact With</h2>
+    <div className="w-full overflow-y-auto max-h-[700px]">
+      <h2 className="text-2xl font-bold mb-6 text-center bg-background pt-4 pb-2 z-10">
+        Select a Patient to Interact With
+      </h2>
       
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-3 md:grid-cols-4 gap-6 pb-6">
         {PATIENTS.map((patient) => (
           <Card key={patient.id} className="hover:shadow-lg transition-shadow">
             <CardBody className="overflow-visible p-0">
@@ -29,14 +31,14 @@ export default function PatientSelection({ onSelectPatient }: PatientSelectionPr
                   fallbackSrc="/patients/placeholder.jpg" // Fallback if image not found
                 />
                 <div className="absolute top-0 right-0 bg-black/50 text-white px-2 py-1 text-sm rounded-bl-lg">
-                  Age: {patient.age}
+                  
                 </div>
               </div>
             </CardBody>
             <CardFooter className="flex flex-col items-start">
               <div className="flex justify-between w-full mb-2">
                 <h3 className="font-bold text-xl">{patient.name}</h3>
-                <span className="text-sm text-gray-500">{patient.ethnicity}</span>
+                <span className="text-sm text-gray-500">{patient.age}</span>
               </div>
               <p className="text-gray-600 mb-4">{patient.shortDescription}</p>
               <Button 

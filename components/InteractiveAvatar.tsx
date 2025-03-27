@@ -531,7 +531,7 @@ async function processUserInput(userInput: string) {
     return (
       <div className="w-full flex flex-col gap-4">
         <Card>
-          <CardBody className="h-[500px] flex flex-col justify-center items-center p-6">
+          <CardBody className="h-[700px] flex flex-col p-4">
             <PatientSelection onSelectPatient={handleSelectPatient} />
           </CardBody>
         </Card>
@@ -542,7 +542,7 @@ async function processUserInput(userInput: string) {
   return (
     <div className="w-full flex flex-col gap-4">
       <Card>
-        <CardBody className="h-[500px] flex flex-col justify-center items-center">
+        <CardBody className="h-[700px] flex flex-col justify-center items-center">
           {stream ? (
             <div className="h-[500px] w-[900px] justify-center items-center flex rounded-lg overflow-hidden relative">
               <video

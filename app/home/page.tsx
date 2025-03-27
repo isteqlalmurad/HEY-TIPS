@@ -11,7 +11,7 @@ export default function HomePage() {
 
   return (
     <div className="w-screen flex flex-col">
-      <div className="w-[900px] flex flex-col items-start justify-start gap-5 mx-auto pt-4 pb-20">
+      <div className="w-[1100px] flex flex-col items-start justify-start gap-5 mx-auto pt-4 pb-20">
         <Tabs 
           aria-label="Conversation Modes" 
           selectedKey={activeTab}
