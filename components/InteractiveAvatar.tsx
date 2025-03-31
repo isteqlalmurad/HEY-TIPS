@@ -11,9 +11,6 @@ import {
   CardBody,
   CardFooter,
   Divider,
-  Input,
-  Select,
-  SelectItem,
   Spinner,
   Chip,
   Progress,
@@ -24,6 +21,7 @@ import { useEffect, useRef, useState } from "react";
 import { STT_LANGUAGE_LIST } from "@/app/lib/constants";
 import { PATIENTS, Patient } from "@/app/lib/patients";
 import PatientSelection from "./PatientSelection";
+import PatientSidebar from "./PatientSidebar";
 
 interface Message {
   role: "user" | "assistant" | "system";
@@ -54,15 +52,19 @@ export default function InteractiveAvatar() {
   const recordedChunks = useRef<BlobPart[]>([]);
 
   // Handle patient selection
-  const handleSelectPatient = (patient: Patient) => {
+  const handleSelectPatient = async (patient: Patient) => {
+    console.log("Patient selected:", patient.name);
     setSelectedPatient(patient);
-    // Set avatar ID from patient data
+    // Set avatar ID from patient data - preserve the exact avatarId
     setAvatarId(patient.avatarId);
     // Initialize messages with system message
     setMessages([
       { role: "system", content: patient.systemMessage }
     ]);
     setSessionId(null); // Reset session ID for new patient
+    
+    // Automatically start the session
+    await startSession(patient);
   };
 
   async function fetchAccessToken() {
@@ -79,14 +81,17 @@ export default function InteractiveAvatar() {
     return "";
   }
 
-  async function startSession() {
-    if (!selectedPatient) {
+  async function startSession(patient = selectedPatient) {
+    if (!patient) {
       setDebug("No patient selected");
       return;
     }
 
     setIsLoadingSession(true);
     const newToken = await fetchAccessToken();
+    
+    // Make sure we're using the correct patient's avatar ID
+    const avatarId = patient.avatarId;
     
     // Pre-check microphone permissions
     try {
@@ -149,7 +154,7 @@ export default function InteractiveAvatar() {
     try {
       const res = await avatar.current.createStartAvatar({
         quality: AvatarQuality.Low,
-        avatarName: avatarId,
+        avatarName: patient.avatarId, // Use patient's specific avatarId directly
         knowledgeId: knowledgeId,
         voice: {
           rate: 1.2,
@@ -169,7 +174,7 @@ export default function InteractiveAvatar() {
       setTimeout(async () => {
         if (avatar.current) {
           await avatar.current.speak({ 
-            text: `Hello! I'm ${selectedPatient.name}. I'm here to discuss my health concerns with you. This session will last for 15 minutes. Use the microphone button to speak, and I'll respond.`, 
+            text: `Hello! I'm an AI patient Developed by TIPS I will be role playing as ${patient.name}. I'm here to discuss my health concerns with you. This session will last for 15 minutes. Use the microphone button to speak, and I'll respond.`, 
             taskType: TaskType.REPEAT, 
             taskMode: TaskMode.SYNC 
           });
@@ -281,119 +286,118 @@ export default function InteractiveAvatar() {
     }
   }
 
-async function processUserInput(userInput: string) {
-  if (!userInput.trim()) return;
-  
-  try {
-    setDebug(`Processing: "${userInput}" with OpenAI...`);
+  async function processUserInput(userInput: string) {
+    if (!userInput.trim()) return;
     
-    // Add user message to chat history for OpenAI context
-    const userMessage = { role: "user" as const, content: userInput };
-    setMessages(prev => [...prev, userMessage]);
-    
-    // Prepare conversation history for the API
-    const conversationHistory = [
-      ...messages,
-      userMessage
-    ];
-    
-    // Set up streaming response using the existing generate-response endpoint with stream=true
-    const response = await fetch("http://localhost:8000/generate-response", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        messages: conversationHistory,
-        session_id: sessionId,
-        stream: true  // Enable streaming
-      }),
-    });
-    
-    if (!response.ok) {
-      throw new Error(`API error: ${response.status}`);
-    }
-    
-    // Create a reader to read the streaming response
-    const reader = response.body!.getReader();
-    const decoder = new TextDecoder();
-    
-    let aiResponseChunks: string[] = [];
-    let currentChunk = "";
-    let fullResponse = "";
-    let isFirstChunk = true;
-    
-    // Set up a queue for chunks to be spoken
-    const chunkQueue: string[] = [];
-    let isProcessingQueue = false;
-    
-    // Function to process chunks in the queue
-    async function processChunkQueue() {
-      if (isProcessingQueue || chunkQueue.length === 0) return;
+    try {
+      setDebug(`Processing: "${userInput}" with OpenAI...`);
       
-      isProcessingQueue = true;
+      // Add user message to chat history for OpenAI context
+      const userMessage = { role: "user" as const, content: userInput };
+      setMessages(prev => [...prev, userMessage]);
       
-      while (chunkQueue.length > 0) {
-        const chunk = chunkQueue.shift()!;
-        
-        if (chunk.trim() && avatar.current) {
-          try {
-            // Use ASYNC mode for smoother delivery after the first chunk
-            await avatar.current.speak({
-              text: chunk,
-              taskType: TaskType.REPEAT,
-              taskMode: isFirstChunk ? TaskMode.SYNC : TaskMode.ASYNC
-            });
-            
-            isFirstChunk = false;
-          } catch (error) {
-            console.error("Error speaking chunk:", error);
-          }
-        }
+      // Prepare conversation history for the API
+      const conversationHistory = [
+        ...messages,
+        userMessage
+      ];
+      
+      // Set up streaming response using the existing generate-response endpoint with stream=true
+      const response = await fetch("http://localhost:8000/generate-response", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          messages: conversationHistory,
+          session_id: sessionId,
+          stream: true  // Enable streaming
+        }),
+      });
+      
+      if (!response.ok) {
+        throw new Error(`API error: ${response.status}`);
       }
       
-      isProcessingQueue = false;
-    }
-    
-    // Function to process the stream of chunks
-    async function processStream() {
-      try {
-        while (true) {
-          const { done, value } = await reader.read();
+      // Create a reader to read the streaming response
+      const reader = response.body!.getReader();
+      const decoder = new TextDecoder();
+      
+      let aiResponseChunks: string[] = [];
+      let currentChunk = "";
+      let fullResponse = "";
+      let isFirstChunk = true;
+      
+      // Set up a queue for chunks to be spoken
+      const chunkQueue: string[] = [];
+      let isProcessingQueue = false;
+      
+      // Function to process chunks in the queue
+      async function processChunkQueue() {
+        if (isProcessingQueue || chunkQueue.length === 0) return;
+        
+        isProcessingQueue = true;
+        
+        while (chunkQueue.length > 0) {
+          const chunk = chunkQueue.shift()!;
           
-          if (done) {
-            // Add any remaining text as a final chunk
-            if (currentChunk.trim()) {
-              chunkQueue.push(currentChunk);
-              processChunkQueue();
-            }
-            break;
-          }
-          
-          // Decode the chunk
-          const chunk = decoder.decode(value);
-          const lines = chunk.split('\n').filter(line => line.trim());
-          
-          for (const line of lines) {
+          if (chunk.trim() && avatar.current) {
             try {
-              const data = JSON.parse(line);
-              const textChunk = data.chunk;
+              // Use ASYNC mode for smoother delivery after the first chunk
+              await avatar.current.speak({
+                text: chunk,
+                taskType: TaskType.REPEAT,
+                taskMode: isFirstChunk ? TaskMode.SYNC : TaskMode.ASYNC
+              });
               
-              if (textChunk) {
-                fullResponse += textChunk;
-                currentChunk += textChunk;
+              isFirstChunk = false;
+            } catch (error) {
+              console.error("Error speaking chunk:", error);
+            }
+          }
+        }
+        
+        isProcessingQueue = false;
+      }
+      
+      // Function to process the stream of chunks
+      async function processStream() {
+        try {
+          while (true) {
+            const { done, value } = await reader.read();
+            
+            if (done) {
+              // Add any remaining text as a final chunk
+              if (currentChunk.trim()) {
+                chunkQueue.push(currentChunk);
+                processChunkQueue();
+              }
+              break;
+            }
+            
+            // Decode the chunk
+            const chunk = decoder.decode(value);
+            const lines = chunk.split('\n').filter(line => line.trim());
+            
+            for (const line of lines) {
+              try {
+                const data = JSON.parse(line);
+                const textChunk = data.chunk;
                 
-                // Chunk the text at natural boundaries:
-                // 1. After a reasonable length (15+ chars) AND
-                // 2. At a sentence boundary or punctuation, OR
-                // 3. If the chunk is getting too long (50+ chars)
-                if ((currentChunk.length >= 15 && 
-                     (currentChunk.endsWith('.') || 
-                      currentChunk.endsWith('!') || 
-                      currentChunk.endsWith('?') || 
-                      currentChunk.endsWith(':') ||
-                      currentChunk.endsWith(','))) || 
-                    currentChunk.length >= 50) {
+                if (textChunk) {
+                  fullResponse += textChunk;
+                  currentChunk += textChunk;
+                  
+                  // Chunk the text at natural boundaries:
+                  // 1. After a reasonable length (15+ chars) AND
+                  // 2. At a sentence boundary or punctuation, OR
+                  // 3. If the chunk is getting too long (50+ chars)
+                  if (currentChunk.length >= 15 && 
+                    (currentChunk.endsWith('.') || 
+                     currentChunk.endsWith('!') || 
+                     currentChunk.endsWith('?') || 
+                     currentChunk.endsWith(':') ||
+                     currentChunk.endsWith(','))) {
                   
                   chunkQueue.push(currentChunk);
                   currentChunk = "";
@@ -403,42 +407,42 @@ async function processUserInput(userInput: string) {
                     processChunkQueue();
                   }
                 }
+                }
+              } catch (error) {
+                console.error("Error parsing JSON chunk:", error);
               }
-            } catch (error) {
-              console.error("Error parsing JSON chunk:", error);
             }
           }
+          
+          // Update messages with the complete AI response
+          setMessages(prev => [...prev, { role: "assistant", content: fullResponse }]);
+          setDebug(`Finished streaming response: ${fullResponse.substring(0, 50)}...`);
+          
+        } catch (error) {
+          console.error("Error in stream processing:", error);
+          throw error;
         }
-        
-        // Update messages with the complete AI response
-        setMessages(prev => [...prev, { role: "assistant", content: fullResponse }]);
-        setDebug(`Finished streaming response: ${fullResponse.substring(0, 50)}...`);
-        
-      } catch (error) {
-        console.error("Error in stream processing:", error);
-        throw error;
       }
+      
+      // Start processing the stream
+      await processStream();
+      
+    } catch (error) {
+      console.error("Error processing user input:", error);
+      setDebug(`Error: ${error instanceof Error ? error.message : String(error)}`);
+      
+      // Provide error feedback through avatar
+      if (avatar.current) {
+        await avatar.current.speak({
+          text: "I'm sorry, I encountered an error processing your request.",
+          taskType: TaskType.REPEAT,
+          taskMode: TaskMode.SYNC
+        });
+      }
+    } finally {
+      setIsProcessing(false);
     }
-    
-    // Start processing the stream
-    await processStream();
-    
-  } catch (error) {
-    console.error("Error processing user input:", error);
-    setDebug(`Error: ${error instanceof Error ? error.message : String(error)}`);
-    
-    // Provide error feedback through avatar
-    if (avatar.current) {
-      await avatar.current.speak({
-        text: "I'm sorry, I encountered an error processing your request.",
-        taskType: TaskType.REPEAT,
-        taskMode: TaskMode.SYNC
-      });
-    }
-  } finally {
-    setIsProcessing(false);
   }
-}
 
   async function handleInterrupt() {
     if (!avatar.current) {
@@ -497,6 +501,9 @@ async function processUserInput(userInput: string) {
     } else {
       setMessages([]);
     }
+    
+    // Reset selected patient
+    setSelectedPatient(null);
   }
 
   useEffect(() => {
@@ -540,151 +547,77 @@ async function processUserInput(userInput: string) {
   }
 
   return (
-    <div className="w-full flex flex-col gap-4">
+    <div className="w-[1100px] flex flex-col gap-4">
       <Card>
-        <CardBody className="h-[700px] flex flex-col justify-center items-center">
+        <CardBody className="h-[550px] flex flex-col">
           {stream ? (
-            <div className="h-[500px] w-[900px] justify-center items-center flex rounded-lg overflow-hidden relative">
-              <video
-                ref={mediaStream}
-                autoPlay
-                playsInline
-                style={{
-                  width: "100%",
-                  height: "100%",
-                  objectFit: "contain",
-                }}
-              >
-                <track kind="captions" />
-              </video>
-              
-              {/* Patient info header */}
-              <div className="absolute top-3 left-0 right-0 px-4">
-                <div className="flex items-center gap-2 bg-black/50 text-white p-2 rounded-lg mb-2">
-                  <Avatar
-                    src={selectedPatient.imagePath}
-                    className="w-8 h-8"
-                    fallback={selectedPatient.name.charAt(0)}
-                  />
-                  <div className="flex-1">
-                    <p className="font-bold text-sm">{selectedPatient.name}</p>
-                    <p className="text-xs">{selectedPatient.age} years, {selectedPatient.ethnicity}</p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-xs">Session time: {formatTimeRemaining(sessionTimeRemaining)}</p>
-                    <Progress 
-                      color="primary" 
-                      value={sessionProgressPercent} 
-                      className="w-full mt-1" 
-                      size="sm"
-                    />
-                  </div>
-                </div>
-              </div>
-              
-              {/* Transcription display */}
-              {transcription && (
-                <div className="absolute top-20 left-0 right-0 px-4 py-2 bg-black/50 text-white">
-                  <p className="text-sm font-bold">You said:</p>
-                  <p className="text-base">{transcription}</p>
-                </div>
-              )}
-              
-              <div className="flex flex-col gap-2 absolute bottom-3 right-3">
-                <Button
-                  className="bg-gradient-to-tr from-indigo-500 to-indigo-300 text-white rounded-lg"
-                  size="md"
-                  variant="shadow"
-                  onClick={handleInterrupt}
-                >
-                  Interrupt
-                </Button>
-                <Button
-                  className="bg-gradient-to-tr from-indigo-500 to-indigo-300 text-white rounded-lg"
-                  size="md"
-                  variant="shadow"
-                  onClick={endSession}
-                >
-                  End session
-                </Button>
-              </div>
-            </div>
-          ) : !isLoadingSession ? (
-            <div className="h-full justify-center items-center flex flex-col gap-8 w-[500px] self-center">
-              <div className="flex flex-col gap-4 w-full">
-                {/* Patient info display */}
-                <div className="flex items-center gap-4 p-4 bg-gray-100 dark:bg-gray-800 rounded-lg">
-                  <Avatar
-                    src={selectedPatient.imagePath}
-                    className="w-16 h-16"
-                    fallback={selectedPatient.name.charAt(0)}
-                  />
-                  <div>
-                    <h3 className="font-bold text-xl">{selectedPatient.name}</h3>
-                    <p className="text-sm text-gray-500">
-                      {selectedPatient.age} years, {selectedPatient.ethnicity}
-                    </p>
-                    <p className="mt-1">{selectedPatient.shortDescription}</p>
-                  </div>
-                </div>
-                
-                <p className="text-sm font-medium leading-none">
-                  Custom Knowledge ID (optional)
-                </p>
-                <Input
-                  placeholder="Enter a custom knowledge ID"
-                  value={knowledgeId}
-                  onChange={(e) => setKnowledgeId(e.target.value)}
-                />
-                
-                <p className="text-sm font-medium leading-none">
-                  Avatar Selection
-                </p>
-                {/* Avatar is pre-selected based on patient data */}
-                <Input
-                  placeholder="Avatar ID"
-                  value={avatarId}
-                  onChange={(e) => setAvatarId(e.target.value)}
-                  endContent={
-                    <Button 
-                      size="sm" 
-                      color="default" 
-                      variant="flat" 
-                      onClick={() => setSelectedPatient(null)}
-                    >
-                      Change Patient
-                    </Button>
-                  }
-                />
-                
-                <Select
-                  label="Select language"
-                  placeholder="Select language"
-                  className="max-w-xs"
-                  selectedKeys={[language]}
-                  onChange={(e) => {
-                    setLanguage(e.target.value);
+            <div className="h-[550px] w-full flex rounded-lg overflow-hidden relative">
+              {/* Main video area - 72% width (reduced from 80%) */}
+              <div className="w-[72%] h-full relative">
+                <video
+                  ref={mediaStream}
+                  autoPlay
+                  playsInline
+                  style={{
+                    width: "100%",
+                    height: "100%",
+                    objectFit: "contain",
                   }}
                 >
-                  {STT_LANGUAGE_LIST.map((lang) => (
-                    <SelectItem key={lang.key}>
-                      {lang.label}
-                    </SelectItem>
-                  ))}
-                </Select>
+                  <track kind="captions" />
+                </video>
+                
+                {/* Session timer */}
+                <div className="absolute top-3 left-0 right-0 px-4">
+                  <div className="flex justify-between items-center mb-1">
+                    <span className="text-sm">Session time: {formatTimeRemaining(sessionTimeRemaining)}</span>
+                    <span className="text-sm">{Math.round(sessionProgressPercent)}%</span>
+                  </div>
+                  <Progress 
+                    color="primary" 
+                    value={sessionProgressPercent} 
+                    className="w-full" 
+                    size="sm"
+                  />
+                </div>
+                
+                {/* Transcription display */}
+                {transcription && (
+                  <div className="absolute top-16 left-0 right-0 px-4 py-2 bg-black/50 text-white">
+                    <p className="text-sm font-bold">You said:</p>
+                    <p className="text-base">{transcription}</p>
+                  </div>
+                )}
+                
+                <div className="flex flex-col gap-2 absolute bottom-3 right-3">
+                  <Button
+                    className="bg-gradient-to-tr from-indigo-500 to-indigo-300 text-white rounded-lg"
+                    size="md"
+                    variant="shadow"
+                    onClick={handleInterrupt}
+                  >
+                    Interrupt
+                  </Button>
+                  <Button
+                    className="bg-gradient-to-tr from-indigo-500 to-indigo-300 text-white rounded-lg"
+                    size="md"
+                    variant="shadow"
+                    onClick={endSession}
+                  >
+                    End session
+                  </Button>
+                </div>
               </div>
               
-              <Button
-                className="bg-gradient-to-tr from-indigo-500 to-indigo-300 w-full text-white"
-                size="md"
-                variant="shadow"
-                onClick={startSession}
-              >
-                Start 15-minute session with {selectedPatient.name}
-              </Button>
+              {/* Patient sidebar - 28% width (increased from 20%) */}
+              <div className="w-[28%] border-l border-divider">
+                <PatientSidebar patient={selectedPatient} />
+              </div>
             </div>
           ) : (
-            <Spinner color="default" size="lg" />
+            <div className="h-full flex items-center justify-center">
+              <Spinner color="default" size="lg" />
+            </div>
           )}
         </CardBody>
         <Divider />
@@ -726,7 +659,7 @@ async function processUserInput(userInput: string) {
               ) : stream ? (
                 <p className="text-sm text-gray-500">Click to start/stop recording</p>
               ) : (
-                <p className="text-sm text-gray-500">Start a session to begin</p>
+                <p className="text-sm text-gray-500">Select a patient to begin</p>
               )}
             </div>
           </div>

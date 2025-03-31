@@ -5,6 +5,7 @@ import { useState, useEffect, useRef } from "react";
 import { Button, Card, CardBody, CardFooter, Divider, Spinner, Avatar } from "@nextui-org/react";
 import InteractiveAvatarTextInput from "./InteractiveAvatarTextInput";
 import PatientSelection from "./PatientSelection";
+import PatientSidebar from "./PatientSidebar";
 import { Patient } from "@/app/lib/patients";
 
 interface Message {
@@ -109,97 +110,88 @@ export default function ChatMode() {
 
   return (
     <Card className="w-full h-[700px] flex flex-col">
-      <CardBody className="flex-grow overflow-y-auto p-4">
-        <div className="flex flex-col gap-4">
-          {/* Patient info header */}
-          <div className="flex items-center gap-4 p-4 bg-gray-100 dark:bg-gray-800 rounded-lg mb-4">
-            <Avatar
-              src={selectedPatient.imagePath}
-              fallback={selectedPatient.name.charAt(0)}
-              className="w-12 h-12"
-            />
-            <div>
-              <h3 className="font-bold text-lg">{selectedPatient.name}</h3>
-              <p className="text-sm text-gray-500">
-                {selectedPatient.age} years, {selectedPatient.ethnicity}
-              </p>
-            </div>
-            <Button 
-              size="sm" 
-              variant="flat" 
-              color="default" 
-              className="ml-auto"
-              onClick={() => setSelectedPatient(null)}
-            >
-              Change Patient
-            </Button>
-          </div>
-
-          {messages.filter(msg => msg.role !== "system").length === 0 ? (
-            <div className="text-center text-gray-500 mt-10">
-              Start a conversation with {selectedPatient.name} by sending a message
-            </div>
-          ) : (
-            messages.filter(msg => msg.role !== "system").map((message, index) => (
-              <div
-                key={index}
-                className={`flex ${
-                  message.role === "user" ? "justify-end" : "justify-start"
-                }`}
-              >
-                <div
-                  className={`flex gap-2 max-w-[80%] ${
-                    message.role === "user" ? "flex-row-reverse" : "flex-row"
-                  }`}
-                >
-                  <Avatar
-                    className={message.role === "user" ? "bg-indigo-500" : "bg-gray-500"}
-                    size="sm"
-                    name={message.role === "user" ? "You" : selectedPatient.name}
-                    src={message.role === "assistant" ? selectedPatient.imagePath : undefined}
-                  />
-                  <div
-                    className={`rounded-lg p-3 ${
-                      message.role === "user"
-                        ? "bg-indigo-500 text-white"
-                        : "bg-gray-200 dark:bg-gray-700"
-                    }`}
-                  >
-                    {message.content}
+      <CardBody className="flex-grow p-0">
+        <div className="flex h-full">
+          {/* Main chat area - 80% width */}
+          <div className="w-[80%] h-full flex flex-col">
+            <div className="flex-grow overflow-y-auto p-4">
+              <div className="flex flex-col gap-4">
+                {messages.filter(msg => msg.role !== "system").length === 0 ? (
+                  <div className="text-center text-gray-500 mt-10">
+                    Start a conversation with {selectedPatient.name} by sending a message
                   </div>
-                </div>
-              </div>
-            ))
-          )}
-          {isLoading && (
-            <div className="flex justify-start">
-              <div className="flex gap-2 max-w-[80%]">
-                <Avatar 
-                  className="bg-gray-500" 
-                  size="sm" 
-                  name={selectedPatient.name}
-                  src={selectedPatient.imagePath} 
-                />
-                <div className="rounded-lg p-3 bg-gray-200 dark:bg-gray-700">
-                  <Spinner size="sm" color="default" />
-                </div>
+                ) : (
+                  messages.filter(msg => msg.role !== "system").map((message, index) => (
+                    <div
+                      key={index}
+                      className={`flex ${
+                        message.role === "user" ? "justify-end" : "justify-start"
+                      }`}
+                    >
+                      <div
+                        className={`flex gap-2 max-w-[80%] ${
+                          message.role === "user" ? "flex-row-reverse" : "flex-row"
+                        }`}
+                      >
+<Avatar
+  style={{ width: "40px", height: "40px" }}
+  className={`${message.role === "user" ? "bg-indigo-500" : "bg-gray-500"} flex-shrink-0`}
+  name={message.role === "user" ? "You" : selectedPatient.name}
+  src={message.role === "assistant" ? selectedPatient.imagePath : undefined}
+/>
+
+                        <div
+                          className={`rounded-lg p-3 ${
+                            message.role === "user"
+                              ? "bg-indigo-500 text-white"
+                              : "bg-gray-200 dark:bg-gray-700"
+                          }`}
+                        >
+                          {message.content}
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                )}
+                {isLoading && (
+                  <div className="flex justify-start">
+                    <div className="flex gap-2 max-w-[80%]">
+                      <Avatar 
+                        className="bg-gray-500" 
+                        size="sm" 
+                        name={selectedPatient.name}
+                        src={selectedPatient.imagePath} 
+                      />
+                      <div className="rounded-lg p-3 bg-gray-200 dark:bg-gray-700">
+                        <Spinner size="sm" color="default" />
+                      </div>
+                    </div>
+                  </div>
+                )}
+                <div ref={messagesEndRef} />
               </div>
             </div>
-          )}
-          <div ref={messagesEndRef} />
+            
+            <Divider />
+            
+            <div className="p-2">
+              <InteractiveAvatarTextInput
+                input={input}
+                label={`Message ${selectedPatient.name}`}
+                loading={isLoading}
+                placeholder="Type your message..."
+                setInput={setInput}
+                onSubmit={handleSubmit}
+              />
+            </div>
+          </div>
+          
+          {/* Patient sidebar - 20% width */}
+          <div className="w-[40%] border-l border-divider">
+            <PatientSidebar patient={selectedPatient} />
+          </div>
         </div>
       </CardBody>
-      <Divider />
-      <CardFooter>
-        <InteractiveAvatarTextInput
-          input={input}
-          label={`Message ${selectedPatient.name}`}
-          loading={isLoading}
-          placeholder="Type your message..."
-          setInput={setInput}
-          onSubmit={handleSubmit}
-        />
-      </CardFooter>
     </Card>
   );
 }
