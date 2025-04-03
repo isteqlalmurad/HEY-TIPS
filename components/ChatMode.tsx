@@ -56,7 +56,7 @@ export default function ChatMode() {
       }));
 
       // Call Python backend API directly to get response
-      const response = await fetch("http://localhost:8000/generate-response", {
+      const response = await fetch("https://tips-backend-4f554527f65d.herokuapp.com/generate-response", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

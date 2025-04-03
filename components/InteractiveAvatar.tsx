@@ -107,7 +107,7 @@ export default function InteractiveAvatar() {
 
     // Initialize session ID for OpenAI conversation
     try {
-      const response = await fetch("http://localhost:8000/generate-response", {
+      const response = await fetch("https://tips-backend-4f554527f65d.herokuapp.com/generate-response", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -253,7 +253,7 @@ export default function InteractiveAvatar() {
           }
           
           // Send audio to Python backend for transcription with Whisper
-          const transcriptionResponse = await fetch("http://localhost:8000/transcribe-audio", {
+          const transcriptionResponse = await fetch("https://tips-backend-4f554527f65d.herokuapp.com/transcribe-audio", {
             method: "POST",
             body: formData,
           });
@@ -303,7 +303,7 @@ export default function InteractiveAvatar() {
       ];
       
       // Set up streaming response using the existing generate-response endpoint with stream=true
-      const response = await fetch("http://localhost:8000/generate-response", {
+      const response = await fetch("https://tips-backend-4f554527f65d.herokuapp.com/generate-response", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
